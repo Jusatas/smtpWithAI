@@ -3,28 +3,34 @@ import socket
 import ssl
 import base64
 import zipfile
+import asyncio
+import aiofiles 
 
-def send_command(ssl_sock, command, decode=True):
-    ssl_sock.sendall(command.encode())
-    response = ssl_sock.recv(1024)
+async def send_command(writer, command, reader, decode=True):
+    writer.write(command.encode())
+    await writer.drain()
+    response = await reader.read(1024)
     if decode:
         return response.decode()
     return response
 
-def smtp_connect(smtp_server, port):
+async def smtp_connect(smtp_server, port):
     context = ssl.create_default_context() # secure sockets layer protocol default settings
-    sock = socket.create_connection((smtp_server, port))
-    ssl_sock = context.wrap_socket(sock, server_hostname=smtp_server)
-    return ssl_sock
+    reader, writer = await asyncio.open_connection(
+        smtp_server, port, ssl=context
+    )
+    greeting = await reader.read(1024)
+    
+    return reader, writer, greeting.decode()
 
-def smtp_authenticate(ssl_sock, sender_address, password):
+async def smtp_authenticate(reader, writer, sender_address, password):
 
-    response = send_command(ssl_sock, "EHLO localhost\r\n")
+    response = await send_command(writer, "EHLO localhost\r\n", reader)
     print("Google replied to the EHLO command:\n", response)
 
     # response is bytes but we decoded,so it is a string containing the SMTP status
     # and a message saying what they want now
-    response = send_command(ssl_sock, "AUTH LOGIN\r\n")
+    response = await send_command(writer, "AUTH LOGIN\r\n", reader)
 
     # response is a string without whitespace (whitespace causes b64 encoding errors)
     response = response.strip()
@@ -40,18 +46,22 @@ def smtp_authenticate(ssl_sock, sender_address, password):
 
     # Send sender_address
     encoded_sender_address = base64.b64encode(sender_address.encode())
-    response = send_command(ssl_sock, encoded_sender_address.decode() + "\r\n").strip().split()[1]
+    response = await send_command(writer, encoded_sender_address.decode() + "\r\n", reader)
+    response = response.strip().split()[1]
     response = base64.b64decode(response).decode()
-    print("Google replied to my sender_address\n", response)
+    print("Server replied to my sender_address\n", response)
+
 
 
     # Send password
     encoded_password = base64.b64encode(password.encode())
-    response = send_command(ssl_sock, encoded_password.decode() + "\r\n")
+    response = await send_command(writer, encoded_password.decode() + "\r\n", reader)
     print("Password authentication response:\n", response)
+    return response
 
-def smtp_send_email(
-    ssl_sock,
+async def smtp_send_email(
+    reader,
+    writer,
     sender_address,
     display_name,
     recipient,
@@ -62,9 +72,9 @@ def smtp_send_email(
     # Create ZIP if attachments are provided
     zip_filename = None
     if attachment_files:
-        zip_filename = create_zip_file(attachment_files)
+        zip_filename = await create_zip_file(attachment_files)
 
-    email_content = create_email(
+    email_content = await create_email(
         sender_address,
         display_name,
         recipient,
@@ -73,23 +83,28 @@ def smtp_send_email(
         zip_filename
     )
     # setup the mail
-    response = send_command(ssl_sock, f"MAIL FROM:<{sender_address}>\r\n")
+    response = await send_command(writer, f"MAIL FROM:<{sender_address}>\r\n", reader)
     print("MAIL FROM response:\n", response)
-    response = send_command(ssl_sock, f"RCPT TO:<{recipient}>\r\n")
+    
+    response = await send_command(writer, f"RCPT TO:<{recipient}>\r\n", reader)
     print("RCPT TO response:\n", response)
-    response = send_command(ssl_sock, "DATA\r\n")
+    
+    response = await send_command(writer, "DATA\r\n", reader)
     print("DATA response:\n", response)
 
-    # send the message 
-    email_content += ".\r\n" # protocol terminator
-    response = send_command(ssl_sock, email_content, decode=True)
+    # Send the message 
+    email_content += ".\r\n"  # protocol terminator
+    response = await send_command(writer, email_content, reader)
     print("Message data response:\n", response)
 
+    await send_command(writer, "QUIT\r\n", reader)
+    writer.close()
+    await writer.wait_closed()
 
     if zip_filename:
         os.remove(zip_filename)
 
-def create_zip_file(attachment_files):
+async def create_zip_file(attachment_files):
     zip_filename = "attachments.zip"
 
     try:
@@ -98,19 +113,19 @@ def create_zip_file(attachment_files):
                 filename = os.path.basename(file_path)
                 zipf.write(file_path, filename)
     except Exception as e:
-        print(f"Problem creaeting zip {filename}: {e}")
+        print(f"Problem creating zip {filename}: {e}")
         return None
     
     return zip_filename
 
-def create_email(sender_address, display_name, recipient,
+async def create_email(sender_address, display_name, recipient,
                 subject, message_body, zip_filename = None):
 
     boundary = "any boundary"
     if zip_filename:
         try:
-            with open(zip_filename, 'rb') as file:
-                file_bytes = file.read()
+            async with aiofiles.open(zip_filename, 'rb') as file:
+                file_bytes = await file.read()
                 fileb64 = base64.b64encode(file_bytes).decode()
 
                 email = (
@@ -150,5 +165,3 @@ def create_email(sender_address, display_name, recipient,
         )
 
     return email
-
-    return
