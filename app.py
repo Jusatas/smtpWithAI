@@ -20,10 +20,23 @@ HTML_FORM = """
   <label>App Password:<br><input name="password" type="password"></label><br><br>
   <label>To:<br><input name="recipient"></label><br><br>
   <label>Subject:<br><input name="subject"></label><br><br>
-  <label>Message:<br><textarea name="message_body" rows="5" cols="40"></textarea></label><br><br>
+    <label>
+    <input type="checkbox" id="use_ai" name="use_ai" onclick="toggleBody(this)">
+    Let AI write my mail
+  </label><br><br>
+
+  <label>Message:<br>
+    <textarea id="body" name="message_body" rows="5" cols="40"></textarea>
+  </label><br><br>
   <label>Attachments:<br><input type="file" name="attachments" multiple></label><br><br>
   <button type="submit">Send</button>
 </form>
+
+<script>
+function toggleBody(checkbox) {
+  document.getElementById("body").disabled = checkbox.checked;
+}
+</script>
 """
 
 @app.get("/", response_class=HTMLResponse)
@@ -40,6 +53,7 @@ async def send_email(
     message_body: str = Form(...),
     smtp_server: str = Form("smtp.gmail.com"),
     port: int = Form(465),
+    use_ai: bool = Form(False),
     attachments: List[UploadFile] = File(None)
 ):
     # Save uploaded files if they were actually selected
