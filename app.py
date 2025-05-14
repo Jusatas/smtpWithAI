@@ -78,14 +78,12 @@ async def send_email(
     if use_ai:
         if not openai_api_key:
             raise HTTPException(status_code=400, detail="OpenAI API key is required when using AI.")
-        # Temporarily set the key for ai_utils
-        os.environ["OPENAI_API_KEY"] = openai_api_key
-
         # Generate the body based on headers
         message_body = await generate_email_body(
-            sender = f"{display_name} <{sender_address}>",
-            recipient = recipient,
-            subject = subject
+            sender=f"{display_name}",
+            recipient=recipient,
+            subject=subject,
+            api_key=openai_api_key
         )
 
     # Save uploaded files if they were actually selected
