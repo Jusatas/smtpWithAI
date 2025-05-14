@@ -81,10 +81,9 @@ def smtp_send_email(
     print("DATA response:\n", response)
 
     # send the message 
+    email_content += ".\r\n" # protocol terminator
     response = send_command(ssl_sock, email_content, decode=True)
     print("Message data response:\n", response)
-
-    send_command(ssl_sock, ".\r\n") # Protocol terminator
 
 
     if zip_filename:
@@ -92,10 +91,16 @@ def smtp_send_email(
 
 def create_zip_file(attachment_files):
     zip_filename = "attachments.zip"
-    with zipfile.ZipFile(zip_filename, 'w') as zipf:
-        for file_path in attachment_files:
-            filename = os.path.basename(file_path)
-            zipf.write(file_path, filename)
+
+    try:
+        with zipfile.ZipFile(zip_filename, 'w') as zipf:
+            for file_path in attachment_files:
+                filename = os.path.basename(file_path)
+                zipf.write(file_path, filename)
+    except Exception as e:
+        print(f"Problem creaeting zip {filename}: {e}")
+        return None
+    
     return zip_filename
 
 def create_email(sender_address, display_name, recipient,
@@ -147,17 +152,32 @@ def create_email(sender_address, display_name, recipient,
     return email
   
 def main():
-    pass
-    # with smtp_connect(smtp_server, port) as ssl_sock:
-    #     banner = ssl_sock.recv(1024).decode()
-    #     print("Server banner:\n", banner)
+    smtp_server = "smtp.gmail.com"
+    port = 465
+    sender_address = "s@gmail.com"
+    password = "c"
+    recipient = "s@gmail.com"
+    display_name = "Pastininkas"
+    subject = "Laiskelis"
+    message_body = "Mano laiskas cia"
+    attachments = ["test.txt"]
 
-    #     smtp_authenticate(ssl_sock, sender_address, password)
+    with smtp_connect(smtp_server, port) as ssl_sock:
+        banner = ssl_sock.recv(1024).decode()
+        print("Server banner:\n", banner)
 
-    #     smtp_send_email(ssl_sock, sender_address, recipient, ready_email)
+        smtp_authenticate(ssl_sock, sender_address, password)
+        smtp_send_email(
+            ssl_sock,
+            sender_address,
+            display_name,
+            recipient,
+            subject,
+            message_body,
+            attachment_files=attachments
+        )
 
-    #     response = send_command(ssl_sock, "QUIT\r\n")
-    #     print("QUIT response:\n", response)
-
+        response = send_command(ssl_sock, "QUIT\r\n")
+        print("QUIT response:\n", response)
 
 main()
