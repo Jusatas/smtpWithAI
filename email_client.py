@@ -50,20 +50,45 @@ def smtp_authenticate(ssl_sock, sender_address, password):
     response = send_command(ssl_sock, encoded_password.decode() + "\r\n")
     print("Password authentication response:\n", response)
 
-def smtp_send_email(ssl_sock, sender_address, recipient, message):
+def smtp_send_email(
+    ssl_sock,
+    sender_address,
+    display_name,
+    recipient,
+    subject,
+    message_body,
+    attachment_files=None
+):
+    # Create ZIP if attachments are provided
+    zip_filename = None
+    if attachment_files:
+        zip_filename = create_zip_file(attachment_files)
+
+    email_content = create_email(
+        sender_address,
+        display_name,
+        recipient,
+        subject,
+        message_body,
+        zip_filename
+    )
     # setup the mail
     response = send_command(ssl_sock, f"MAIL FROM:<{sender_address}>\r\n")
     print("MAIL FROM response:\n", response)
-
     response = send_command(ssl_sock, f"RCPT TO:<{recipient}>\r\n")
     print("RCPT TO response:\n", response)
-
     response = send_command(ssl_sock, "DATA\r\n")
     print("DATA response:\n", response)
 
     # send the message 
-    response = send_command(ssl_sock, message, decode=True)
+    response = send_command(ssl_sock, email_content, decode=True)
     print("Message data response:\n", response)
+
+    send_command(ssl_sock, ".\r\n") # Protocol terminator
+
+
+    if zip_filename:
+        os.remove(zip_filename)
 
 def create_zip_file(attachment_files):
     zip_filename = "attachments.zip"
@@ -103,7 +128,6 @@ def create_email(sender_address, display_name, recipient,
                     f"{fileb64}\r\n"
                     "\r\n"
                     f"--{boundary}--\r\n"
-                    ".\r\n"
                 )
         except Exception as e:
             print (f"Error: cannot open file {zip_filename} : {e}")
@@ -111,35 +135,19 @@ def create_email(sender_address, display_name, recipient,
 
     else: # No zip
         email = (
-        # headers
-        f"From: \"{sender_address}\"\r\n"
-        f"To: {recipient}\r\n"
-        f"Subject: {subject}\r\n"
-        "\r\n" # header-body separator
-        f"{message_body}\r\n"
-        ".\r\n" # end symbol
+            f"From: \"{display_name}\" <{sender_address}>\r\n"
+            f"To: {recipient}\r\n"
+            f"Subject: {subject}\r\n"
+            f"MIME-Version: 1.0\r\n"
+            f"Content-Type: text/plain; charset=\"utf-8\"\r\n"
+            "\r\n"
+            f"{message_body}\r\n"
         )
 
     return email
   
-        
-def smtp_send_email_with_attachments(ssl_sock, sender_address, display_name, recipient, subject, message_body, attachment_files):
-    zip_filename = create_zip_file(attachment_files)
-    email_content = create_email(sender_address, display_name, recipient, subject, message_body, zip_filename)
-    smtp_send_email(ssl_sock, sender_address, recipient, email_content)
-    os.remove(zip_filename)
-
 def main():
-    # smtp_server = "smtp.gmail.com"
-    # port = 465  # SSL port for Gmail SMTP
-    # sender_address = ""
-    # password = ""
-    # recipient = ""
-    # subject = ""
-    # sender = ""
-    # message = "this is my default msg\r\nhere I write something"
-
-
+    pass
     # with smtp_connect(smtp_server, port) as ssl_sock:
     #     banner = ssl_sock.recv(1024).decode()
     #     print("Server banner:\n", banner)
@@ -150,8 +158,6 @@ def main():
 
     #     response = send_command(ssl_sock, "QUIT\r\n")
     #     print("QUIT response:\n", response)
-    zip_filename = create_zip_file(attachment_files)
-    email = create_email(1, 1, 1, 1, 1)
-    print(f"this is the email {email}")
+
 
 main()
