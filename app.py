@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Form, File, UploadFile, HTTPException
 from fastapi.responses import HTMLResponse
+from fastapi import Response
 from typing import List
 import os
 import tempfile
@@ -68,7 +69,7 @@ async def send_email(
     display_name: str = Form(...),
     recipient: str = Form(...),
     subject: str = Form(...),
-    message_body: str = Form(...),
+    message_body: str = Form(""),
     smtp_server: str = Form("smtp.gmail.com"),
     port: int = Form(465),
     use_ai: bool = Form(False),
@@ -114,9 +115,8 @@ async def send_email(
             message_body,
             attachment_files if attachment_files else None  # Send None if empty
         )
-        await smtp_functions.smtp_quit(reader, writer)
 
-        return {"status": "success", "message": "Email sent successfully"}
+        return Response(status_code=204)
     
     except Exception as e:
         return {"status": "error", "message": str(e)}
