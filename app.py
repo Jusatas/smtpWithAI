@@ -5,6 +5,7 @@ import os
 import tempfile
 
 import smtp_functions
+from ai_utils import generate_email_body
 
 app = FastAPI()
 
