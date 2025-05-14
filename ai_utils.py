@@ -10,7 +10,9 @@ async def generate_email_body (
     prompt = (
         f"Write a polite email adressed to {recipient} from {sender}."
         f"The email should be about {subject}. Make it sound important."
-        f"remind the user why it is important"
+        f"remind the user why it is important. Talk like {subject} is"
+        f"already in process and make up something that {recipient} has"
+        f"already done."
     )
     return await asyncio.to_thread(openai_call, prompt, api_key)
 
