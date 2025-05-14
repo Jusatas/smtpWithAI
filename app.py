@@ -13,28 +13,45 @@ HTML_FORM = """
 <title>Send Email</title>
 <h1>Send Email</h1>
 <form action="/send-email" method="post" enctype="multipart/form-data">
-  <label>SMTP Server:<br><input name="smtp_server" value="smtp.gmail.com"></label><br><br>
-  <label>Port:<br><input name="port" value="465"></label><br><br>
-  <label>Your Email:<br><input name="sender_address"></label><br><br>
-  <label>Your Name:<br><input name="display_name"></label><br><br>
-  <label>App Password:<br><input name="password" type="password"></label><br><br>
-  <label>To:<br><input name="recipient"></label><br><br>
-  <label>Subject:<br><input name="subject"></label><br><br>
-    <label>
-    <input type="checkbox" id="use_ai" name="use_ai" onclick="toggleBody(this)">
+  <!-- SMTP settings + credentials -->
+  SMTP Server: <input name="smtp_server" value="smtp.gmail.com"><br>
+  Port:        <input name="port" value="465"><br><br>
+
+  Your Email:  <input name="sender_address"><br>
+  Your Name:   <input name="display_name"><br>
+  App Password:<input name="password" type="password"><br><br>
+
+  To:      <input name="recipient"><br>
+  Subject: <input name="subject"><br><br>
+
+  <!-- AI checkbox -->
+  <label>
+    <input type="checkbox" id="use_ai" name="use_ai" onclick="toggleFields(this)">
     Let AI write my mail
   </label><br><br>
 
-  <label>Message:<br>
-    <textarea id="body" name="message_body" rows="5" cols="40"></textarea>
-  </label><br><br>
-  <label>Attachments:<br><input type="file" name="attachments" multiple></label><br><br>
+  <!-- OpenAI key, hidden by default -->
+  <div id="ai_key_div" style="display:none;">
+    OpenAI API Key:<br>
+    <input id="ai_key" name="openai_api_key" type="password"><br><br>
+  </div>
+
+  <!-- Message body -->
+  Message:<br>
+  <textarea id="body" name="message_body" rows="5" cols="40"></textarea><br><br>
+
+  <!-- Attachments -->
+  Attachments: <input type="file" name="attachments" multiple><br><br>
+
   <button type="submit">Send</button>
 </form>
 
 <script>
-function toggleBody(checkbox) {
-  document.getElementById("body").disabled = checkbox.checked;
+function toggleFields(cb) {
+  // Show/hide the API key field
+  document.getElementById("ai_key_div").style.display = cb.checked ? "block" : "none";
+  // Disable/enable the message textarea
+  document.getElementById("body").disabled = cb.checked;
 }
 </script>
 """
@@ -54,8 +71,23 @@ async def send_email(
     smtp_server: str = Form("smtp.gmail.com"),
     port: int = Form(465),
     use_ai: bool = Form(False),
+    openai_api_key: str = Form(""), 
     attachments: List[UploadFile] = File(None)
 ):
+    
+    if use_ai:
+        if not openai_api_key:
+            raise HTTPException(status_code=400, detail="OpenAI API key is required when using AI.")
+        # Temporarily set the key for ai_utils
+        os.environ["OPENAI_API_KEY"] = openai_api_key
+
+        # Generate the body based on headers
+        message_body = await generate_email_body(
+            sender = f"{display_name} <{sender_address}>",
+            recipient = recipient,
+            subject = subject
+        )
+
     # Save uploaded files if they were actually selected
     # FastAPI give empty objects even if no files were selected
     # So they need to be "filtered out"
