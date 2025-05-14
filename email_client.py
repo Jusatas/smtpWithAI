@@ -118,8 +118,7 @@ def create_email(sender_address, display_name, recipient,
         "\r\n" # header-body separator
         f"{message_body}\r\n"
         ".\r\n" # end symbol
-        ) 
-    email += f"--{boundary}--\r\n.\r\n"
+        )
 
     return email
   
@@ -140,14 +139,6 @@ def main():
     # sender = ""
     # message = "this is my default msg\r\nhere I write something"
 
-    # ready_email = (
-    #         # headers
-    #         f"From: \"{sender}\"\r\n"
-    #         f"To: {recipient}\r\n"W
-    #         f"Subject: {subject}\r\n"
-    #         "\r\n" # header-body separator
-    #         f"{message}\r\n"
-    #         ".\r\n") # end symbol
 
     # with smtp_connect(smtp_server, port) as ssl_sock:
     #     banner = ssl_sock.recv(1024).decode()
