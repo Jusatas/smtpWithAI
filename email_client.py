@@ -73,76 +73,94 @@ def create_zip_file(attachment_files):
             zipf.write(file_path, filename)
     return zip_filename
 
-def create_email_with_zip(sender_address, display_name, recipient, subject, message_body, zip_filename):
-    with open(zip_filename, 'rb') as file:
-        file_bytes = file.read()
+def create_email(sender_address, display_name, recipient,
+                subject, message_body, zip_filename = None):
 
-    fileb64 = base64.b64encode(file_bytes).decode()
-    
     boundary = "any boundary"
+    if zip_filename:
+        try:
+            with open(zip_filename, 'rb') as file:
+                file_bytes = file.read()
+                fileb64 = base64.b64encode(file_bytes).decode()
 
-    email = (
-        f"From: \"{display_name}\" <{sender_address}>\r\n"
+                email = (
+                    f"From: \"{display_name}\" <{sender_address}>\r\n"
+                    f"To: {recipient}\r\n"
+                    f"Subject: {subject}\r\n"
+                    f"MIME-Version: 1.0\r\n"
+                    f"Content-Type: multipart/mixed; boundary=\"{boundary}\"\r\n"
+                    "\r\n"
+                    f"--{boundary}\r\n"
+                    f"Content-Type: text/plain; charset=\"utf-8\"\r\n"
+                    "\r\n"
+                    f"{message_body}\r\n"
+                    "\r\n"
+                    f"--{boundary}\r\n"
+                    f"Content-Type: application/zip\r\n"
+                    f"Content-Disposition: attachment; filename=\"{zip_filename}\"\r\n"
+                    f"Content-Transfer-Encoding: base64\r\n"
+                    "\r\n"
+                    f"{fileb64}\r\n"
+                    "\r\n"
+                    f"--{boundary}--\r\n"
+                    ".\r\n"
+                )
+        except Exception as e:
+            print (f"Error: cannot open file {zip_filename} : {e}")
+            return None
+
+    else: # No zip
+        email = (
+        # headers
+        f"From: \"{sender_address}\"\r\n"
         f"To: {recipient}\r\n"
         f"Subject: {subject}\r\n"
-        f"MIME-Version: 1.0\r\n"
-        f"Content-Type: multipart/mixed; boundary=\"{boundary}\"\r\n"
-        "\r\n"
-        
-        f"--{boundary}\r\n"
-        f"Content-Type: text/plain\r\n"
-        "\r\n"
+        "\r\n" # header-body separator
         f"{message_body}\r\n"
-        "\r\n"
-        
-        f"--{boundary}\r\n"
-        f"Content-Type: application/zip\r\n"
-        f"Content-Disposition: attachment; filename=\"{zip_filename}\"\r\n"
-        f"Content-Transfer-Encoding: base64\r\n"
-        "\r\n"
-        f"{fileb64}\r\n"
-        "\r\n"
-        
-        f"--{boundary}--\r\n"
-        ".\r\n"
-    )
-    
-    return email
+        ".\r\n" # end symbol
+        ) 
+    email += f"--{boundary}--\r\n.\r\n"
 
+    return email
+  
+        
 def smtp_send_email_with_attachments(ssl_sock, sender_address, display_name, recipient, subject, message_body, attachment_files):
     zip_filename = create_zip_file(attachment_files)
-    email_content = create_email_with_zip(sender_address, display_name, recipient, subject, message_body, zip_filename)
+    email_content = create_email(sender_address, display_name, recipient, subject, message_body, zip_filename)
     smtp_send_email(ssl_sock, sender_address, recipient, email_content)
     os.remove(zip_filename)
 
 def main():
-    smtp_server = "smtp.gmail.com"
-    port = 465  # SSL port for Gmail SMTP
-    sender_address = ""
-    password = ""
-    recipient = ""
-    subject = ""
-    sender = ""
-    message = "this is my default msg\r\nhere I write something"
+    # smtp_server = "smtp.gmail.com"
+    # port = 465  # SSL port for Gmail SMTP
+    # sender_address = ""
+    # password = ""
+    # recipient = ""
+    # subject = ""
+    # sender = ""
+    # message = "this is my default msg\r\nhere I write something"
 
-    ready_email = (
-            # headers
-            f"From: \"{sender}\"\r\n"
-            f"To: {recipient}\r\n"
-            f"Subject: {subject}\r\n"
-            "\r\n" # header-body separator
-            f"{message}\r\n"
-            ".\r\n") # end symbol
+    # ready_email = (
+    #         # headers
+    #         f"From: \"{sender}\"\r\n"
+    #         f"To: {recipient}\r\n"W
+    #         f"Subject: {subject}\r\n"
+    #         "\r\n" # header-body separator
+    #         f"{message}\r\n"
+    #         ".\r\n") # end symbol
 
-    with smtp_connect(smtp_server, port) as ssl_sock:
-        banner = ssl_sock.recv(1024).decode()
-        print("Server banner:\n", banner)
+    # with smtp_connect(smtp_server, port) as ssl_sock:
+    #     banner = ssl_sock.recv(1024).decode()
+    #     print("Server banner:\n", banner)
 
-        smtp_authenticate(ssl_sock, sender_address, password)
+    #     smtp_authenticate(ssl_sock, sender_address, password)
 
-        smtp_send_email(ssl_sock, sender_address, recipient, ready_email)
+    #     smtp_send_email(ssl_sock, sender_address, recipient, ready_email)
 
-        response = send_command(ssl_sock, "QUIT\r\n")
-        print("QUIT response:\n", response)
+    #     response = send_command(ssl_sock, "QUIT\r\n")
+    #     print("QUIT response:\n", response)
+    zip_filename = create_zip_file(attachment_files)
+    email = create_email(1, 1, 1, 1, 1)
+    print(f"this is the email {email}")
 
 main()
