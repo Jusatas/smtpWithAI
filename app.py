@@ -1,26 +1,34 @@
-from fastapi import FastAPI, Form, Request, HTTPException, File, UploadFile
+from fastapi import FastAPI, Form, File, UploadFile, HTTPException
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
-from fastapi.staticfiles import StaticFiles
-from typing import List, Optional
+from typing import List
 import os
 import tempfile
-import asyncio
 
-# Import our async SMTP functions
-import async_smtp_functions
+import smtp_functions
 
-app = FastAPI(title="SMTP Email Client")
+app = FastAPI()
 
-# Set up templates
-templates = Jinja2Templates(directory="templates")
-
-# Create templates directory if it doesn't exist
-os.makedirs("templates", exist_ok=True)
+HTML_FORM = """
+<!doctype html>
+<title>Send Email</title>
+<h1>Send Email</h1>
+<form action="/send-email" method="post" enctype="multipart/form-data">
+  <label>SMTP Server:<br><input name="smtp_server" value="smtp.gmail.com"></label><br><br>
+  <label>Port:<br><input name="port" value="465"></label><br><br>
+  <label>Your Email:<br><input name="sender_address"></label><br><br>
+  <label>Your Name:<br><input name="display_name"></label><br><br>
+  <label>App Password:<br><input name="password" type="password"></label><br><br>
+  <label>To:<br><input name="recipient"></label><br><br>
+  <label>Subject:<br><input name="subject"></label><br><br>
+  <label>Message:<br><textarea name="message_body" rows="5" cols="40"></textarea></label><br><br>
+  <label>Attachments:<br><input type="file" name="attachments" multiple></label><br><br>
+  <button type="submit">Send</button>
+</form>
+"""
 
 @app.get("/", response_class=HTMLResponse)
-async def get_email_form(request: Request):
-    return templates.TemplateResponse("email_form.html", {"request": request})
+async def form():
+    return HTML_FORM
 
 @app.post("/send-email")
 async def send_email(
@@ -34,25 +42,24 @@ async def send_email(
     port: int = Form(465),
     attachments: List[UploadFile] = File(None)
 ):
-    # Save uploaded files temporarily
+    # Save uploaded files if they were actually selected
+    # FastAPI give empty objects even if no files were selected
+    # So they need to be "filtered out"
     attachment_files = []
-    if attachments and attachments[0].filename:
-        for attachment in attachments:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(attachment.filename)[1]) as temp_file:
-                content = await attachment.read()
-                temp_file.write(content)
-                attachment_files.append(temp_file.name)
+    if attachments:
+        for file in attachments:
+            if file.filename:  # Only handle files that have a name
+                suffix = os.path.splitext(file.filename)[1]
+                temp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+                content = await file.read()
+                temp.write(content)
+                temp.close()
+                attachment_files.append(temp.name)
 
     try:
-        # Connect to SMTP server
-        reader, writer, greeting = await async_smtp_functions.smtp_connect(smtp_server, port)
-        print(f"Connected to server: {greeting}")
-        
-        # Authenticate
-        auth_response = await async_smtp_functions.smtp_authenticate(reader, writer, sender_address, password)
-        
-        # Send email
-        send_response = await async_smtp_functions.smtp_send_email(
+        reader, writer, greeting = await smtp_functions.smtp_connect(smtp_server, port)
+        await smtp_functions.smtp_authenticate(reader, writer, sender_address, password)
+        await smtp_functions.smtp_send_email(
             reader,
             writer,
             sender_address,
@@ -60,29 +67,21 @@ async def send_email(
             recipient,
             subject,
             message_body,
-            attachment_files
+            attachment_files if attachment_files else None  # Send None if empty
         )
-        
-        # Close connection gracefully
-        await async_smtp_functions.smtp_quit(reader, writer)
-        
-        # Clean up temporary files
-        for file_path in attachment_files:
-            if os.path.exists(file_path):
-                os.remove(file_path)
-                
+        await smtp_functions.smtp_quit(reader, writer)
+
         return {"status": "success", "message": "Email sent successfully"}
     
-    except (ConnectionRefusedError, asyncio.TimeoutError) as e:
-        return {"status": "error", "message": f"Connection error: {str(e)}"}
     except Exception as e:
-        return {"status": "error", "message": f"Failed to send email: {str(e)}"}
+        return {"status": "error", "message": str(e)}
+    
     finally:
-        # Make sure to clean up temporary files in case of errors
+        # Clean up
         for file_path in attachment_files:
             if os.path.exists(file_path):
                 os.remove(file_path)
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
